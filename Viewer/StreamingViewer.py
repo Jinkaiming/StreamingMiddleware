@@ -10,12 +10,13 @@ conf = configparser.ConfigParser()
 conf.read('config.ini')
 stream_config = conf['streaming']
 def json_streaming_config():
-    config = {}
+    ret = {}
     for key in stream_config:
-        config[key] = stream_config[key]
+        ret[key] = stream_config[key]
 
-    config['decoder'] = conf['encoder'][stream_config['encoder']]
-    return config
+    ret['decoder'] = conf['encoder'][stream_config['encoder']]
+    ret['ip'] = conf['local']['ip']
+    return json.dumps(ret)
 
 def net_protocols():
     if stream_config['type'].lower() == 'tcp':
@@ -28,28 +29,30 @@ def net_protocols():
 
 
 if __name__ == '__main__':
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # sock.connect(('192.168.43.28',8989))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect(('192.168.43.28',8989))
     target = ('192.168.43.28',8989)
-    config = json.dumps(json_streaming_config())
-    sock.sendto(bytes(config.encode('utf-8')),target)
+    config = json_streaming_config()
+    sock.sendall(bytes(config.encode('utf-8')))
 
     #启动视图程序
     data = b''
+    stream_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    stream_sock.bind(('0.0.0.0',int(stream_config['port'])))
+
 
     while True:
-        print("start")
-        packet,addr = sock.recvfrom(32768)
-        print(packet,addr)
+        print("Wait Stream..")
+        packet,addr = stream_sock.recvfrom(32768)
+        print("Get Stream!")
         if not packet:
             continue
         data += packet
-        print('begin show')
+        print('Begin show')
 
         data,status = cv_show(conf['encoder'][stream_config['encoder']],data)
-
         if not status:
-            sock.sendto(b"STOP",target)
+            sock.sendall(b"STOP")
             break
 
     sock.close()
